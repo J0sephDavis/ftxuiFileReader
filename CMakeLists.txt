@@ -24,18 +24,18 @@ endif()
  
 # --- Build --------------------------------------------------------------------
 
-project(P14_fileViewer
+project(ftxuiFileViewer
   LANGUAGES CXX
   VERSION 1.0.0
 )
-add_executable(PROJ14 
+add_executable(ftxuiFileViewer 
 	src/main.cc
 )
 
-target_include_directories(PROJ14 PRIVATE src)
-target_link_libraries(PROJ14
+target_include_directories(ftxuiFileViewer PRIVATE src)
+target_link_libraries(ftxuiFileViewer
 	PRIVATE ftxui::screen
 	PRIVATE ftxui::dom
 	PRIVATE ftxui::component
 )
-set_target_properties(PROJ14 PROPERTIES CXX_STANDARD 20)
+set_target_properties(ftxuiFileViewer PROPERTIES CXX_STANDARD 20)
