@@ -9,23 +9,24 @@ namespace fs = std::filesystem;
 using namespace ftxui;
 
 Component customFileReader(std::vector<std::string> DATA, std::string PATH, const int _dim_x_, const int _dim_y_) {
+	//manages a float value between two bounds, as well as calculating the float from min to max
 	class rowNumber {
 		public:
 			rowNumber(std::size_t largest_number)
 				: places(countPlaces(largest_number))
 			{/* <-_-> */}
-			std::string pad(std::size_t num) {
+			//returns the necessary padding to right align the supplied number
+			std::string pad(std::size_t num) const {
 				std::string retVal = "";
-				//total spaces to add
-				auto places_to_pad = 0;
-				places_to_pad = places - ((num==0)?1:countPlaces(num));
-				for (auto x = 0; x < places_to_pad; x++) retVal += " ";
+				if (places == 0) return retVal;
+				std::size_t places_to_pad = places - ((num==0)?1:countPlaces(num));
+				for (std::size_t x = 0; x < places_to_pad; x++) retVal += " ";
 				return std::move(retVal);
 			}
-			//total places in base 10
-			std::size_t places = 0;
-			//-----
-			std::size_t countPlaces(std::size_t num) {
+			//total places in the final/largest row number
+			const std::size_t places;
+			//returns the count of places(digits) in a number
+			std::size_t countPlaces(std::size_t num) const {
 				std::size_t total_places = 0;
 				while(num != 0) {
 					num /= 10;
@@ -35,15 +36,53 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			}
 
 	};
+	//manages the float values used for positioning the display
+	class floatCTRL {
+		public:
+			floatCTRL(std::size_t screen_dim, std::size_t content_len = 0)
+			: step((content_len == 0)?0.1f:1.0f/std::move(content_len)) //0.1f if content_len is 0 
+			{
+				if (content_len == 0) {min = 0.0f; max = 1.0f;}
+				else {
+					min = ((step * screen_dim)/2) - step;
+					max  = 1-min;
+				}
+				float_val = min;
+			}
+			//returns the current, unadjust float
+			const float get() { return float_val; }
+			//walks the specified amount of steps to adjust the float_val, within the bounds
+			void walk(int steps) { this->float_val = bound(this->float_val +  (this->step*steps)); }
+			//returns relative progress as float
+			const float prog() { return (float_val - min)/(max-min); }
+		//FUNCTOINS
+		private:
+			//returns input if it is in range, otherwise returns upper/lower boundary respectively
+			float bound(float input) const { return (std::min(max, std::max(min, input))); }
+		//VARIABLES
+		private:
+			//the actual current float_val
+			float float_val;
+			//minimum float value
+			float min;
+			//maximum float value
+			float max;
+			//size of a single step of content
+			const float step;
+	};
+	//change from std::vector<std::string> DATA to Elements. Allow for vector as an alternate constructor
 	class contentBase : public ComponentBase {
 		public:
+			// constructor
 			explicit contentBase(std::vector<std::string> DATA, std::filesystem::path PATH, const int _dim_y_, const int _dim_x_)
 				: _DATA(std::move(DATA)),
 				_PATH(std::move(PATH)),
-				_dim_x_(std::move(_dim_x_)),
-				_dim_y_(std::move(_dim_y_)){
+				float_x(_dim_x_),
+				float_y(_dim_y_-4, _DATA.size())
+			{
 				loadData();
 			};
+			//
 			Element Render() override {
 				return vbox({
 					hbox({
@@ -51,11 +90,11 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 						| flex_grow
 						| vcenter,
 						separatorEmpty(),
-						gaugeRight(currentSTEP) | size(Direction::WIDTH, Constraint::GREATER_THAN, 20) | flex
+						gaugeRight(float_y.prog()) | size(Direction::WIDTH, Constraint::GREATER_THAN, 20) | flex
 					}),
 					separator(),
 					vbox(baseComp->Render())
-					| focusPositionRelative(FLOAT_X, FLOAT_Y)
+					| focusPositionRelative(float_x.get(), float_y.get())
 					| vscroll_indicator
 					| frame
 				});
@@ -63,52 +102,24 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			//
 			bool OnEvent(Event event) override {
 				//ARROWKEYS - NAV
-				if (event == Event::ArrowUp) {
-					//prevents being below the float val where scrolling is visually complete
-					auto ending_bound = std::min(end, FLOAT_Y - STEP);
-					//prevents being above the float val where scrolling is visually complete
-					auto fully_bound = std::max(begin, ending_bound);
-					FLOAT_Y = fully_bound;
-					update_step();
-					return true;
-				}
-				else if (event == Event::ArrowDown) {
-					//prevents being above the float val where scrolling is visually complete
-					auto beginning_bound = std::max(begin, FLOAT_Y + STEP);
-					//prevents being below the float val where scrolling is visually complete
-					auto fully_bound = std::min(end, beginning_bound);
-					FLOAT_Y = fully_bound;
-					update_step();
-					return true;
-				}
-				else if (event == Event::ArrowLeft) {
-					FLOAT_X = std::max(0.0f, FLOAT_X - STEP);
-					return true;
-				}
-				else if (event == Event::ArrowRight) {
-					FLOAT_X = std::min(1.0f, FLOAT_X + STEP);
-					return true;
-				}
-				return false;
+				if (event == Event::ArrowUp) 		float_y.walk(-1);
+				else if (event == Event::ArrowDown) 	float_y.walk(1);
+				else if (event == Event::ArrowLeft) 	float_x.walk(-1);
+				else if (event == Event::ArrowRight) 	float_x.walk(1);
+				else return false;
+				return true;
 			};
 			//
 		private:
-			void update_step() {
-				float tmp = (FLOAT_Y-begin);
-				if (tmp > 0)
-					currentSTEP = tmp/(end-begin);
-				else
-					currentSTEP = 0.0f;
-			}
 			Element renderLine(std::string line) {
 				return text(line);
 			};
 			void loadData() {
 				baseComp = Container::Vertical({});
 				//
-				auto data_size = _DATA.size();
+				std::size_t data_size = _DATA.size();
 				//used to find the totaldigits in a number
-				auto total_places = rowNumber(data_size);//countPlaces(data_size);
+				rowNumber total_places = rowNumber(data_size+1);
 				//tmp var that is changed again later
 				for (auto& str : _DATA) {
 					//consider replacing the innerds here with a passable,
@@ -117,40 +128,23 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 					//May allow for reusing this entire component when dealing with lists of strings
 					//by writing a component builder for each use case.
 
-					//the current row num
-					auto row_num = baseComp->ChildCount();
-					//
-					auto tmpComp = Renderer([&, row_num]{
+					//get row num
+					std::size_t row_num = baseComp->ChildCount()+1;
+					Component tmpComp = Renderer([&, row_num,total_places]{
 						return hbox({
-							text(total_places.pad(row_num) + std::to_string(row_num) + "| ") | bold | color(Color::Cyan),// | size(Direction::WIDTH, Constraint::EQUAL,3),
+							text(total_places.pad(row_num) + std::to_string(row_num) + "| ") | bold | color(Color::Cyan),
 							renderLine(str),
 						});
 					});
 					baseComp->Add(tmpComp);
 				}
-				//gets the amount of focus change for one line move
-				STEP = (1.0f / baseComp->ChildCount());
-				//adjusted_y = (dim_y - border - border - separator - line)
-				//beg. = STEP * adjusted_y
-				//beg. /= 2
-				begin = (STEP * (_dim_y_ - 4)/2) - STEP;
-				FLOAT_Y = begin;
-				//somewhat arbitrary multipliers here...requires some thinking
-				end = 1-begin-STEP;//(STEP * _dim_y_) - 2.25 * STEP;
 			}
-			//
-			float FLOAT_X = 0.0f;
-			float FLOAT_Y = 0.0f;
-			float STEP = 0.005f;
-			int _dim_y_;
-			int _dim_x_;
-			float begin;
-			float end;
-			float currentSTEP = 0;
 			//
 			std::vector<std::string> _DATA;
 			Component baseComp;
 			std::filesystem::path _PATH;
+			//
+			floatCTRL float_x, float_y;
 	};
 	return Make<contentBase>(std::move(DATA), std::move(PATH), std::move(_dim_y_), std::move(_dim_x_));
 
@@ -173,8 +167,7 @@ int main(int argc, char** argv) {
 	auto comp_dim_y = 40;
 	auto comp_dim_x = 80;
 	//filePath
-	if (argc < 2)
-		return EXIT_FAILURE;
+	if (argc < 2) return EXIT_FAILURE;
 	//if size parameters are passed
 	if (argc >= 4) {
 		try {
@@ -188,14 +181,11 @@ int main(int argc, char** argv) {
 	}
 	//get file path
 	fs::path inP(argv[1]);
-	//consider giving an err msg
-	if (!std::filesystem::is_regular_file(inP))
-		return EXIT_FAILURE;
+	if (!std::filesystem::is_regular_file(inP)) return EXIT_FAILURE;
 	auto file_contents = getFileContents(inP);
-	//needed to cast from std::size_t to int
-	int content_len = file_contents.size();
-	//----------
-	comp_dim_y = std::min(comp_dim_y, content_len + 4 /*compensating for the borders and stuff*/);
+	//
+	//compensating for the borders and stuff
+	comp_dim_y = std::min(comp_dim_y, (int)file_contents.size() + 4 );
 	auto mainComp = customFileReader(std::move(file_contents), std::move(inP), comp_dim_x, comp_dim_y);
 	mainComp |= border
 		| size(Direction::HEIGHT, Constraint::LESS_THAN, comp_dim_y)
@@ -218,6 +208,7 @@ int main(int argc, char** argv) {
 		return false;
 	});
 	screen.Loop(renderer | roh);
+	screen.ExitLoopClosure();
 	return EXIT_SUCCESS;
 }
 /*TODO:
@@ -225,4 +216,5 @@ int main(int argc, char** argv) {
  * Allow for sed finding? Or just basic regex/rapidfuzz so that stuff can be found easier in the doc. Maybe grep?
  * Add command parsing
  * Add a config that contains default values(like the size of the window) or changes the color scheme
+ * Adjust `screen` such that it fits within the terminal boundaries(check if ftxui will provide the maximum possible dimension based on terminal dimensions)
 */
