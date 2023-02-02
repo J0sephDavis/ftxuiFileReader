@@ -44,7 +44,7 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			{
 				if (content_len == 0) {min = 0.0f; max = 1.0f;}
 				else {
-					min = ((step * screen_dim)/2) - step;
+					min = ((step * screen_dim)/2) - ((content_len % 2 != 0)?0:step/2);
 					max  = 1-min;
 				}
 				float_val = min;
@@ -106,6 +106,11 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 				else if (event == Event::ArrowDown) 	float_y.walk(1);
 				else if (event == Event::ArrowLeft) 	float_x.walk(-1);
 				else if (event == Event::ArrowRight) 	float_x.walk(1);
+				else if (event.is_mouse()) {
+					auto mouse = event.mouse();
+					if (mouse.button == Mouse::WheelDown) float_y.walk(2);
+					if (mouse.button == Mouse::WheelUp) float_y.walk(-2);
+				}
 				else return false;
 				return true;
 			};
