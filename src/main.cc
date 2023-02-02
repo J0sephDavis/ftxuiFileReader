@@ -117,17 +117,11 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			void loadData() {
 				baseComp = Container::Vertical({});
 				//
-				std::size_t data_size = _DATA.size();
-				//used to find the totaldigits in a number
-				rowNumber total_places = rowNumber(data_size+1);
+				std::size_t data_size(_DATA.size());
+				//Ensures all the row numbers occupy the same amount of space
+				rowNumber total_places(data_size+1);
 				//tmp var that is changed again later
 				for (auto& str : _DATA) {
-					//consider replacing the innerds here with a passable,
-					// 	std::function<Component(std::string>),
-					//that will handle the building of the line entry? 
-					//May allow for reusing this entire component when dealing with lists of strings
-					//by writing a component builder for each use case.
-
 					//get row num
 					std::size_t row_num = baseComp->ChildCount()+1;
 					Component tmpComp = Renderer([&, row_num,total_places]{
@@ -190,6 +184,7 @@ int main(int argc, char** argv) {
 	mainComp |= border
 		| size(Direction::HEIGHT, Constraint::LESS_THAN, comp_dim_y)
 		| size(Direction::WIDTH, Constraint::LESS_THAN, comp_dim_x);
+	//
 	auto renderer = Renderer(mainComp, [&]{
 		return hbox({
 			emptyElement() | flex_grow,
@@ -199,7 +194,6 @@ int main(int argc, char** argv) {
 	});
 	//
 	auto screen = ScreenInteractive::FitComponent();
-	//
 	auto roh = CatchEvent([&screen](Event event) {
 		if (event == Event::Character('q') or event == Event::Escape) {
 			screen.Exit();
@@ -208,7 +202,7 @@ int main(int argc, char** argv) {
 		return false;
 	});
 	screen.Loop(renderer | roh);
-	screen.ExitLoopClosure();
+	screen.ExitLoopClosure(); //Unsure if this is necessary, treating it as a good luck charm 
 	return EXIT_SUCCESS;
 }
 /*TODO:
