@@ -9,33 +9,6 @@ namespace fs = std::filesystem;
 using namespace ftxui;
 
 Component customFileReader(std::vector<std::string> DATA, std::string PATH, const int _dim_x_, const int _dim_y_) {
-	//manages a float value between two bounds, as well as calculating the float from min to max
-	class rowNumber {
-		public:
-			rowNumber(std::size_t largest_number)
-				: places(countPlaces(largest_number))
-			{/* <-_-> */}
-			//returns the necessary padding to right align the supplied number
-			std::string pad(std::size_t num) const {
-				std::string retVal = "";
-				if (places == 0) return retVal;
-				std::size_t places_to_pad = places - ((num==0)?1:countPlaces(num));
-				for (std::size_t x = 0; x < places_to_pad; x++) retVal += " ";
-				return std::move(retVal);
-			}
-			//total places in the final/largest row number
-			const std::size_t places;
-			//returns the count of places(digits) in a number
-			std::size_t countPlaces(std::size_t num) const {
-				std::size_t total_places = 0;
-				while(num != 0) {
-					num /= 10;
-					total_places++;
-				}
-				return total_places;
-			}
-
-	};
 	//manages the float values used for positioning the display
 	class floatCTRL {
 		public:
@@ -44,7 +17,9 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			{
 				if (content_len == 0) {min = 0.0f; max = 1.0f;}
 				else {
-					min = ((step * screen_dim)/2) - ((content_len % 2 != 0)?0:step/2);
+					//the minimum value is obviously unstable. previous approach is (step*screen_dim)/2 - (content_len % 2 != 0)?0:step/2)
+					//removed the check and currently always reducing by half a step? Maybe it should be half a step reduced while even, rather than the previous while odd condition
+					min = ((step * screen_dim)/2) - (step/2);
 					max  = 1-min;
 				}
 				float_val = min;
@@ -116,23 +91,25 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			};
 			//
 		private:
-			Element renderLine(std::string line) {
-				return text(line);
-			};
+			//returns the count of places(digits) in a number
+			std::size_t countPlaces(std::size_t num) const {
+				std::size_t total_places = 0;
+				while(num != 0) {
+					num /= 10;
+					total_places++;
+				} return total_places;}
 			void loadData() {
 				baseComp = Container::Vertical({});
 				//
-				std::size_t data_size(_DATA.size());
-				//Ensures all the row numbers occupy the same amount of space
-				rowNumber total_places(data_size+1);
+				std::size_t total_places = countPlaces(_DATA.size());
 				//tmp var that is changed again later
 				for (auto& str : _DATA) {
 					//get row num
 					std::size_t row_num = baseComp->ChildCount()+1;
 					Component tmpComp = Renderer([&, row_num,total_places]{
 						return hbox({
-							text(total_places.pad(row_num) + std::to_string(row_num) + "| ") | bold | color(Color::Cyan),
-							renderLine(str),
+							text(std::to_string(row_num) + "| ") | bold | color(Color::Cyan) | align_right | size(Direction::WIDTH, Constraint::EQUAL, total_places),
+							text(str),
 						});
 					});
 					baseComp->Add(tmpComp);
