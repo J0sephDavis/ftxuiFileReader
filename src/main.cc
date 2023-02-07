@@ -20,7 +20,7 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 					//the minimum value is obviously unstable. previous approach is (step*screen_dim)/2 - (content_len % 2 != 0)?0:step/2)
 					//removed the check and currently always reducing by half a step? Maybe it should be half a step reduced while even, rather than the previous while odd condition
 					min = ((step * screen_dim)/2) - (step/2);
-					max  = 1-min;
+					max  = 1-(min)-(step);
 				}
 				float_val = min;
 			}
