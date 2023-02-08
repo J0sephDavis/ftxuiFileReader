@@ -99,6 +99,17 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 					num /= 10;
 					total_places++;
 				} return total_places;}
+			
+			//might be better to do this by reference? Reduce mem usage and what-not
+			std::string handleIndent(std::string sub_string) const {
+				auto subPos = sub_string.find("\t", 0);
+				while (subPos != std::string::npos && (subPos+1) < sub_string.length()) {
+					sub_string.replace(subPos,1,"    "); //4 space indent
+					subPos = sub_string.find("\t", subPos+1);
+				}
+				return sub_string;
+			}
+
 			void loadData() {
 				baseComp = Container::Vertical({});
 				//
@@ -117,33 +128,25 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 							//find the beginning of the next work
 							strPos = str.find(" ", lastPos);
 							//if there are no more words, moves the strPos to the end of the str the final portion of the string
-							if (/*lastPos < str.length() and*/ strPos == std::string::npos) strPos = str.length();
+							if (strPos == std::string::npos) strPos = str.length();
 							//the word in the string
-							auto sub_string = str.substr(lastPos, strPos-lastPos);
+							auto sub_string = handleIndent(str.substr(lastPos, strPos-lastPos));
 							if (sub_string.length() > 0) {
-								// Creates a flexbox and converts '\t' indents into 4 spaces,
-								// since the text() element was not properly displaying indentations.
-								// Consider separating into its own funtion that will lint the strings before printing.
-
-								auto subPos = sub_string.find("\t", 0);
-								//fixes indents
-								while (subPos != std::string::npos && (subPos+1) < sub_string.length()) {
-									sub_string.replace(subPos,1,"    "); //4 space indent
-									subPos = sub_string.find("\t", subPos+1);
-								}
+								//the amount of times this string would fit across the component
 								int cnt = sub_string.length() / dim_x; 
 								if (cnt > 0) {
-									auto pos_marker = 0;
-									for (auto x = 0; x < cnt; x++) {
-										auto len = std::min(dim_x, sub_string.length()-(dim_x*x));
+									std::size_t pos_marker = 0;
+									for (int x = 0; x < cnt; x++) {
+										//gets the length of string to be used
+										std::size_t len = std::min(dim_x, sub_string.length()-(dim_x*x));
+										//emlaces the sub string inside an element in the flex_string
 										flex_string.emplace_back(text(sub_string.substr(pos_marker,len)));
+										//adjust position to represent where we will read from next
 										pos_marker += len;
 									}
-								}
-								else flex_string.emplace_back(text(sub_string));
+								} else flex_string.emplace_back(text(sub_string));
 
 							}
-							//
 							lastPos = strPos + 1;
 						} while(strPos != std::string::npos);
 					else flex_string.emplace_back(text(std::move(str)));
