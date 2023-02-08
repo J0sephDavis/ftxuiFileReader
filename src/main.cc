@@ -9,33 +9,6 @@ namespace fs = std::filesystem;
 using namespace ftxui;
 
 Component customFileReader(std::vector<std::string> DATA, std::string PATH, const int _dim_x_, const int _dim_y_) {
-	//manages a float value between two bounds, as well as calculating the float from min to max
-	class rowNumber {
-		public:
-			rowNumber(std::size_t largest_number)
-				: places(countPlaces(largest_number))
-			{/* <-_-> */}
-			//returns the necessary padding to right align the supplied number
-			std::string pad(std::size_t num) const {
-				std::string retVal = "";
-				if (places == 0) return retVal;
-				std::size_t places_to_pad = places - ((num==0)?1:countPlaces(num));
-				for (std::size_t x = 0; x < places_to_pad; x++) retVal += " ";
-				return std::move(retVal);
-			}
-			//total places in the final/largest row number
-			const std::size_t places;
-			//returns the count of places(digits) in a number
-			std::size_t countPlaces(std::size_t num) const {
-				std::size_t total_places = 0;
-				while(num != 0) {
-					num /= 10;
-					total_places++;
-				}
-				return total_places;
-			}
-
-	};
 	//manages the float values used for positioning the display
 	class floatCTRL {
 		public:
@@ -44,8 +17,10 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			{
 				if (content_len == 0) {min = 0.0f; max = 1.0f;}
 				else {
-					min = ((step * screen_dim)/2) - ((content_len % 2 != 0)?0:step/2);
-					max  = 1-min;
+					//the minimum value is obviously unstable. previous approach is (step*screen_dim)/2 - (content_len % 2 != 0)?0:step/2)
+					//removed the check and currently always reducing by half a step? Maybe it should be half a step reduced while even, rather than the previous while odd condition
+					min = ((step * screen_dim)/2) - (step/2);
+					max  = 1-(min)-(step);
 				}
 				float_val = min;
 			}
@@ -78,7 +53,8 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 				: _DATA(std::move(DATA)),
 				_PATH(std::move(PATH)),
 				float_x(_dim_x_),
-				float_y(_dim_y_-4, _DATA.size())
+				float_y(_dim_y_-4, _DATA.size()),
+				dim_x(_dim_x_), dim_y(_dim_y_)
 			{
 				loadData();
 			};
@@ -116,23 +92,81 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			};
 			//
 		private:
-			Element renderLine(std::string line) {
-				return text(line);
-			};
+			//returns the count of places(digits) in a number
+			std::size_t countPlaces(std::size_t num) const {
+				std::size_t total_places = 0;
+				while(num != 0) {
+					num /= 10;
+					total_places++;
+				} return total_places;}
+			
+			//might be better to do this by reference? Reduce mem usage and what-not
+			std::string handleIndent(std::string sub_string) const {
+				auto subPos = sub_string.find("\t", 0);
+				while (subPos != std::string::npos && (subPos+1) < sub_string.length()) {
+					sub_string.replace(subPos,1,"    "); //4 space indent
+					subPos = sub_string.find("\t", subPos+1);
+				}
+				return sub_string;
+			}
+
 			void loadData() {
 				baseComp = Container::Vertical({});
 				//
-				std::size_t data_size(_DATA.size());
-				//Ensures all the row numbers occupy the same amount of space
-				rowNumber total_places(data_size+1);
+				std::size_t total_places = countPlaces(_DATA.size());
 				//tmp var that is changed again later
 				for (auto& str : _DATA) {
 					//get row num
 					std::size_t row_num = baseComp->ChildCount()+1;
-					Component tmpComp = Renderer([&, row_num,total_places]{
+					Elements flex_string;
+					//
+					std::size_t lastPos = 0;
+					std::size_t strPos = 0;//str.find(" ", lastPos);
+					if (strPos != std::string::npos and str.length() > 0)
+						do {
+							if (lastPos > str.length()) break;
+							//find the beginning of the next work
+							strPos = str.find(" ", lastPos);
+							//if there are no more words, moves the strPos to the end of the str the final portion of the string
+							if (strPos == std::string::npos) strPos = str.length();
+							//the word in the string
+							auto sub_string = handleIndent(str.substr(lastPos, strPos-lastPos));
+							if (sub_string.length() > 0) {
+								//the amount of times this string would fit across the component
+								int cnt = sub_string.length() / dim_x; 
+								if (cnt > 0) {
+									std::size_t pos_marker = 0;
+									for (int x = 0; x < cnt; x++) {
+										//gets the length of string to be used
+										std::size_t len = std::min(dim_x, sub_string.length()-(dim_x*x));
+										//emlaces the sub string inside an element in the flex_string
+										flex_string.emplace_back(text(sub_string.substr(pos_marker,len)));
+										//adjust position to represent where we will read from next
+										pos_marker += len;
+									}
+								} else flex_string.emplace_back(text(sub_string));
+
+							}
+							lastPos = strPos + 1;
+						} while(strPos != std::string::npos);
+					else flex_string.emplace_back(text(std::move(str)));
+					//
+					Component tmpComp = Renderer([&, row_num, total_places, flex_string]{
 						return hbox({
-							text(total_places.pad(row_num) + std::to_string(row_num) + "| ") | bold | color(Color::Cyan),
-							renderLine(str),
+							//if any string is added to this entry please adjust the SIZE parameter to match
+							vbox(
+								text(std::to_string(row_num) + "|")
+								| bold | color(Color::Cyan) 					//before all adjustments
+								| align_right							//comes before size
+								| size(Direction::WIDTH, Constraint::EQUAL, total_places+1), 	//after all adjustments
+								ftxui::emptyElement() | flex_grow
+							),
+							flexbox(flex_string,
+									FlexboxConfig().SetGap(1, 1)
+											.Set(FlexboxConfig::Wrap::Wrap)
+											.Set(FlexboxConfig::Direction::Row)
+											.Set(FlexboxConfig::AlignContent::FlexStart)
+											.Set(FlexboxConfig::JustifyContent::FlexStart)),
 						});
 					});
 					baseComp->Add(tmpComp);
@@ -142,6 +176,8 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			std::vector<std::string> _DATA;
 			Component baseComp;
 			std::filesystem::path _PATH;
+			//
+			std::size_t dim_x, dim_y;
 			//
 			floatCTRL float_x, float_y;
 	};
