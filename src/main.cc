@@ -107,10 +107,63 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 				for (auto& str : _DATA) {
 					//get row num
 					std::size_t row_num = baseComp->ChildCount()+1;
-					Component tmpComp = Renderer([&, row_num,total_places]{
+					Elements flex_string;
+					//
+					std::size_t lastPos = 0;
+					std::size_t strPos = 0;//str.find(" ", lastPos);
+					if (strPos != std::string::npos and str.length() > 0)
+						do {
+							if (lastPos > str.length()) break;
+							//find the beginning of the next work
+							strPos = str.find(" ", lastPos);
+							//if there are no more words, moves the strPos to the end of the str the final portion of the string
+							if (/*lastPos < str.length() and*/ strPos == std::string::npos) strPos = str.length();
+							//the word in the string
+							auto sub_string = str.substr(lastPos, strPos-lastPos);
+							if (sub_string.length() > 0) {
+								// Creates a flexbox and converts '\t' indents into 4 spaces,
+								// since the text() element was not properly displaying indentations.
+								// Consider separating into its own funtion that will lint the strings before printing.
+
+								auto subPos = sub_string.find("\t", 0);
+								//fixes indents
+								while (subPos != std::string::npos && (subPos+1) < sub_string.length()) {
+									sub_string.replace(subPos,1,"    "); //4 space indent
+									subPos = sub_string.find("\t", subPos+1);
+								}
+								int cnt = sub_string.length() / dim_x; 
+								if (cnt > 0) {
+									auto pos_marker = 0;
+									for (auto x = 0; x < cnt; x++) {
+										auto len = std::min(dim_x, sub_string.length()-(dim_x*x));
+										flex_string.emplace_back(text(sub_string.substr(pos_marker,len)));
+										pos_marker += len;
+									}
+								}
+								else flex_string.emplace_back(text(sub_string));
+
+							}
+							//
+							lastPos = strPos + 1;
+						} while(strPos != std::string::npos);
+					else flex_string.emplace_back(text(std::move(str)));
+					//
+					Component tmpComp = Renderer([&, row_num, total_places, flex_string]{
 						return hbox({
-							text(std::to_string(row_num) + "| ") | bold | color(Color::Cyan) | align_right | size(Direction::WIDTH, Constraint::EQUAL, total_places),
-							text(str),
+							//if any string is added to this entry please adjust the SIZE parameter to match
+							vbox(
+								text(std::to_string(row_num) + "|")
+								| bold | color(Color::Cyan) 					//before all adjustments
+								| align_right							//comes before size
+								| size(Direction::WIDTH, Constraint::EQUAL, total_places+1), 	//after all adjustments
+								ftxui::emptyElement() | flex_grow
+							),
+							flexbox(flex_string,
+									FlexboxConfig().SetGap(1, 1)
+											.Set(FlexboxConfig::Wrap::Wrap)
+											.Set(FlexboxConfig::Direction::Row)
+											.Set(FlexboxConfig::AlignContent::FlexStart)
+											.Set(FlexboxConfig::JustifyContent::FlexStart)),
 						});
 					});
 					baseComp->Add(tmpComp);
