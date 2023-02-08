@@ -53,7 +53,8 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 				: _DATA(std::move(DATA)),
 				_PATH(std::move(PATH)),
 				float_x(_dim_x_),
-				float_y(_dim_y_-4, _DATA.size())
+				float_y(_dim_y_-4, _DATA.size()),
+				dim_x(_dim_x_), dim_y(_dim_y_)
 			{
 				loadData();
 			};
@@ -119,6 +120,8 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 			std::vector<std::string> _DATA;
 			Component baseComp;
 			std::filesystem::path _PATH;
+			//
+			std::size_t dim_x, dim_y;
 			//
 			floatCTRL float_x, float_y;
 	};
