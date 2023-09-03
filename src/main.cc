@@ -155,10 +155,13 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 						return hbox({
 							//if any string is added to this entry please adjust the SIZE parameter to match
 							vbox(
-								text(std::to_string(row_num) + "|")
-								| bold | color(Color::Cyan) 					//before all adjustments
-								| align_right							//comes before size
-								| size(Direction::WIDTH, Constraint::EQUAL, total_places+1), 	//after all adjustments
+								hbox({
+									text(std::to_string(row_num))
+										| bold | color(Color::Cyan) 					//before all adjustments
+										| align_right							//comes before size
+										| size(Direction::WIDTH, Constraint::EQUAL, total_places+1), 	//after all adjustments
+									separator(),
+								}),
 								ftxui::emptyElement() | flex_grow
 							),
 							flexbox(flex_string,
