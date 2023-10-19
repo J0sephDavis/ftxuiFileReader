@@ -3,57 +3,69 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <filesystem>
 #include <ftxui/util/ref.hpp>
+#include <ios>
+#include <stdexcept>
 #include <string>
 
 namespace fs = std::filesystem;
 using namespace ftxui;
 
-Component customFileReader(std::vector<std::string> DATA, std::string PATH, const int _dim_x_, const int _dim_y_) {
-	//manages the float values used for positioning the display
-	class floatCTRL {
+Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y_) {
+	class fileHandler {
 		public:
-			floatCTRL(std::size_t screen_dim, std::size_t content_len = 0)
-			: step((content_len == 0)?0.1f:1.0f/std::move(content_len)) //0.1f if content_len is 0 
+			fileHandler(fs::path file_path, size_t visible_rows = 40, size_t buffer_rows = 120)
+				: file(file_path, std::ios_base::in),
+				buffer_rows(buffer_rows),
+				visible_rows(visible_rows)
 			{
-				if (content_len == 0) {min = 0.0f; max = 1.0f;}
-				else {
-					//the minimum value is obviously unstable. previous approach is (step*screen_dim)/2 - (content_len % 2 != 0)?0:step/2)
-					//removed the check and currently always reducing by half a step? Maybe it should be half a step reduced while even, rather than the previous while odd condition
-					min = ((step * screen_dim)/2) - (step/2);
-					max  = 1-(min)-(step);
+				//Check file validity
+				if (not file.good()) throw std::runtime_error("fileHandler::file.good() == false.");
+				file.open(file_path, std::ios_base::in);
+				//Load data
+				if (file.is_open()) {
+					//contains the number of the buffer entry we are starting from
+					std::string line_to_get;
+					while (Buffer.size() < buffer_rows)
+						if (read_line_to_buffer() == false) break; //breaks if something goes wrong
 				}
-				float_val = min;
+				return;
 			}
-			//returns the current, unadjust float
-			const float get() { return float_val; }
-			//walks the specified amount of steps to adjust the float_val, within the bounds
-			void walk(int steps) { this->float_val = bound(this->float_val +  (this->step*steps)); }
-			//returns relative progress as float
-			const float prog() { return (float_val - min)/(max-min); }
-		//FUNCTOINS
+			std::vector<std::string> get_visible(size_t size = 40) {
+				std::vector<std::string> retVal(size);
+				for (size_t a =0; a < 40; a++) {
+					retVal.emplace_back(Buffer.front());
+					Buffer.pop();
+				}
+				return retVal;
+			}
 		private:
-			//returns input if it is in range, otherwise returns upper/lower boundary respectively
-			float bound(float input) const { return (std::min(max, std::max(min, input))); }
-		//VARIABLES
-		private:
-			//the actual current float_val
-			float float_val;
-			//minimum float value
-			float min;
-			//maximum float value
-			float max;
-			//size of a single step of content
-			const float step;
+			size_t buffer_rows;
+			size_t visible_rows;
+			std::queue<std::string>Buffer; //the buffer containing the lines of the file that we find important
+			std::ifstream file; //input filestream
+			//bool readChunk(size_t chunkSize) {
+			//	//buffer_entry : the entry we begin writing into.
+			//	for (int i = 0; i < chunkSize; i++) {
+			//		Buffer.pop();
+			//		read_line_to_buffer();
+			//	}
+			//	return 1;
+			//}
+			bool read_line_to_buffer() {//, std::ifstream::pos_type file_pos) {
+				if (not file.is_open()) return 0; //failure; cannot read from file.
+				std::string line_to_get;
+				getline(file, line_to_get);
+				Buffer.push(line_to_get);
+				return 1;
+			}
 	};
 	//change from std::vector<std::string> DATA to Elements. Allow for vector as an alternate constructor
 	class contentBase : public ComponentBase {
 		public:
 			// constructor
-			explicit contentBase(std::vector<std::string> DATA, std::filesystem::path PATH, const int _dim_y_, const int _dim_x_)
-				: _DATA(std::move(DATA)),
-				_PATH(std::move(PATH)),
-				float_x(_dim_x_),
-				float_y(_dim_y_-4, _DATA.size()),
+			explicit contentBase(std::filesystem::path PATH, const int _dim_y_, const int _dim_x_)
+				:file_contents(PATH, _dim_y_),
+				_PATH(PATH),
 				dim_x(_dim_x_), dim_y(_dim_y_)
 			{
 				loadData();
@@ -66,140 +78,67 @@ Component customFileReader(std::vector<std::string> DATA, std::string PATH, cons
 						| flex_grow
 						| vcenter,
 						separatorEmpty(),
-						gaugeRight(float_y.prog()) | size(Direction::WIDTH, Constraint::GREATER_THAN, 20) | flex
+						//gaugeRight(float_y.prog()) | size(Direction::WIDTH, Constraint::GREATER_THAN, 20) | flex
 					}),
 					separator(),
 					vbox(baseComp->Render())
-					| focusPositionRelative(float_x.get(), float_y.get())
-					| vscroll_indicator
-					| frame
 				});
 			};
 			//
-			bool OnEvent(Event event) override {
-				//ARROWKEYS - NAV
-				if (event == Event::ArrowUp) 		float_y.walk(-1);
-				else if (event == Event::ArrowDown) 	float_y.walk(1);
-				else if (event == Event::ArrowLeft) 	float_x.walk(-1);
-				else if (event == Event::ArrowRight) 	float_x.walk(1);
-				else if (event.is_mouse()) {
-					auto mouse = event.mouse();
-					if (mouse.button == Mouse::WheelDown) float_y.walk(2);
-					if (mouse.button == Mouse::WheelUp) float_y.walk(-2);
-				}
-				else return false;
-				return true;
-			};
+			//bool OnEvent(Event event) override {
+			//	//ARROWKEYS - NAV
+			//	if (event == Event::ArrowUp) 		file_contents.walk(-1);
+			//	else if (event == Event::ArrowDown) 	file_contents.walk(1);
+			//	else return false;
+			//	return true;
+			//};
 			//
 		private:
-			//returns the count of places(digits) in a number
-			std::size_t countPlaces(std::size_t num) const {
-				std::size_t total_places = 0;
-				while(num != 0) {
-					num /= 10;
-					total_places++;
-				} return total_places;}
-			
-			//might be better to do this by reference? Reduce mem usage and what-not
-			std::string handleIndent(std::string sub_string) const {
-				auto subPos = sub_string.find("\t", 0);
-				while (subPos != std::string::npos && (subPos+1) < sub_string.length()) {
-					sub_string.replace(subPos,1,"    "); //4 space indent
-					subPos = sub_string.find("\t", subPos+1);
-				}
-				return sub_string;
-			}
+			////returns the count of places(digits) in a number
+			//std::size_t countPlaces(std::size_t num) const {
+			//	std::size_t total_places = 0;
+			//	while(num != 0) {
+			//		num /= 10;
+			//		total_places++;
+			//	} return total_places;}
+			//
+			////might be better to do this by reference? Reduce mem usage and what-not
+			//std::string handleIndent(std::string sub_string) const {
+			//	auto subPos = sub_string.find("\t", 0);
+			//	while (subPos != std::string::npos && (subPos+1) < sub_string.length()) {
+			//		sub_string.replace(subPos,1,"    "); //4 space indent
+			//		subPos = sub_string.find("\t", subPos+1);
+			//	}
+			//	return sub_string;
+			//}
 
 			void loadData() {
 				baseComp = Container::Vertical({});
 				//
-				std::size_t total_places = countPlaces(_DATA.size());
-				//tmp var that is changed again later
-				for (auto& str : _DATA) {
-					//get row num
-					std::size_t row_num = baseComp->ChildCount()+1;
-					Elements flex_string;
-					//
-					std::size_t lastPos = 0;
-					std::size_t strPos = 0;//str.find(" ", lastPos);
-					if (strPos != std::string::npos and str.length() > 0)
-						do {
-							if (lastPos > str.length()) break;
-							//find the beginning of the next work
-							strPos = str.find(" ", lastPos);
-							//if there are no more words, moves the strPos to the end of the str the final portion of the string
-							if (strPos == std::string::npos) strPos = str.length();
-							//the word in the string
-							auto sub_string = handleIndent(str.substr(lastPos, strPos-lastPos));
-							if (sub_string.length() > 0) {
-								//the amount of times this string would fit across the component
-								int cnt = sub_string.length() / dim_x; 
-								if (cnt > 0) {
-									std::size_t pos_marker = 0;
-									for (int x = 0; x < cnt; x++) {
-										//gets the length of string to be used
-										std::size_t len = std::min(dim_x, sub_string.length()-(dim_x*x));
-										//emlaces the sub string inside an element in the flex_string
-										flex_string.emplace_back(text(sub_string.substr(pos_marker,len)));
-										//adjust position to represent where we will read from next
-										pos_marker += len;
-									}
-								} else flex_string.emplace_back(text(sub_string));
-
-							}
-							lastPos = strPos + 1;
-						} while(strPos != std::string::npos);
-					else flex_string.emplace_back(text(std::move(str)));
-					//
-					Component tmpComp = Renderer([&, row_num, total_places, flex_string]{
+				int count = 0;
+				for (auto& str : file_contents.get_visible()) {
+					count++;
+					Component tmpComp = Renderer([&, str, count]{
 						return hbox({
-							//if any string is added to this entry please adjust the SIZE parameter to match
-							vbox(
-								hbox({
-									text(std::to_string(row_num))
-										| bold | color(Color::Cyan) 					//before all adjustments
-										| align_right							//comes before size
-										| size(Direction::WIDTH, Constraint::EQUAL, total_places+1), 	//after all adjustments
-									separator(),
-								}),
-								ftxui::emptyElement() | flex_grow
-							),
-							flexbox(flex_string,
-									FlexboxConfig().SetGap(1, 1)
-											.Set(FlexboxConfig::Wrap::Wrap)
-											.Set(FlexboxConfig::Direction::Row)
-											.Set(FlexboxConfig::AlignContent::FlexStart)
-											.Set(FlexboxConfig::JustifyContent::FlexStart)),
+							text(std::to_string(count) + ":"), text(str),
 						});
 					});
+					//
 					baseComp->Add(tmpComp);
 				}
 			}
 			//
-			std::vector<std::string> _DATA;
 			Component baseComp;
 			std::filesystem::path _PATH;
+			fileHandler file_contents;
 			//
 			std::size_t dim_x, dim_y;
 			//
-			floatCTRL float_x, float_y;
+			//floatCTRL float_x, float_y;
 	};
-	return Make<contentBase>(std::move(DATA), std::move(PATH), std::move(_dim_y_), std::move(_dim_x_));
+	return Make<contentBase>(std::move(PATH), std::move(_dim_y_), std::move(_dim_x_));
 
 };
-//returns a vector with all lines of the file
-std::vector<std::string> getFileContents(std::filesystem::path file_path) {
-	std::fstream file_stream(file_path);
-	std::vector<std::string> file_contents;
-	if (file_stream.is_open()) {
-		std::string text;
-		while (getline(file_stream, text)){
-			file_contents.push_back(text);
-		}
-	}
-	file_stream.close();
-	return std::move(file_contents);
-}
 int main(int argc, char** argv) {
 	//default size
 	auto comp_dim_y = 40;
@@ -220,11 +159,9 @@ int main(int argc, char** argv) {
 	//get file path
 	fs::path inP(argv[1]);
 	if (!std::filesystem::is_regular_file(inP)) return EXIT_FAILURE;
-	auto file_contents = getFileContents(inP);
-	//
 	//compensating for the borders and stuff
-	comp_dim_y = std::min(comp_dim_y, (int)file_contents.size() + 4 );
-	auto mainComp = customFileReader(std::move(file_contents), std::move(inP), comp_dim_x, comp_dim_y);
+	comp_dim_y = comp_dim_y;
+	auto mainComp = customFileReader(std::move(inP), comp_dim_x, comp_dim_y);
 	mainComp |= border
 		| size(Direction::HEIGHT, Constraint::LESS_THAN, comp_dim_y)
 		| size(Direction::WIDTH, Constraint::LESS_THAN, comp_dim_x);
