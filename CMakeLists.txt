@@ -28,8 +28,6 @@ project(ftxuiFileViewer
   LANGUAGES CXX
   VERSION 1.0.0
 )
-add_executable(file-handling src/file-handling.cc)
-set_target_properties(file-handling PROPERTIES CXX_STANDARD 20)
 add_executable(ftxuiFileViewer 
 	src/main.cc
 )
