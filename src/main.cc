@@ -1,8 +1,11 @@
 #include <fstream>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/dom/elements.hpp>
+#include <list>
 #include <filesystem>
 #include <ftxui/util/ref.hpp>
+#include <ftxui/dom/table.hpp>
 #include <ios>
 #include <stdexcept>
 #include <string>
@@ -11,6 +14,35 @@ namespace fs = std::filesystem;
 using namespace ftxui;
 
 Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y_) {
+	// Consider switching to structs
+	class file_marker {
+		public:
+			file_marker(size_t line_num, size_t file_pos)
+				: line(line_num), pos(file_pos)
+			{}
+			size_t getPos() const { return pos; };
+			size_t getLine() const { return line; };
+		private:
+			const size_t pos;
+			const size_t line;
+
+	};
+	class composite_entry {
+		public:
+			composite_entry(size_t line_num, std::string content)
+				: _content(content),
+				_line_num(line_num)
+				{}
+			std::string getContent() const {
+				return _content;
+			}
+			std::size_t getLineNum() const {
+				return _line_num;
+			}
+		private:
+			const std::string _content;
+			const std::size_t _line_num;
+	};
 	class fileHandler {
 		public:
 			fileHandler(fs::path file_path, size_t visible_rows = 40, size_t buffer_rows = 120)
@@ -37,21 +69,57 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 				std::vector<std::string> retVal;
 				size_t rows = std::min(size, Buffer.size());
 				for (size_t line =0; line < rows; line++) {
-					retVal.push_back(Buffer.front().data());
+					retVal.push_back("[" + std::to_string(Buffer.front().getLineNum()) + "]" + Buffer.front().getContent());
 					Buffer.pop_front();
 				}
 				return retVal;
 			}
+			std::vector<std::string> show_markers() {
+				std::vector<std::string> retVal;
+				retVal.push_back("Line,Pos [" + std::to_string(markers.size()) + "]");
+				for (auto& mark : markers) {
+					retVal.push_back(std::to_string(mark.getLine()) + "," + std::to_string(mark.getPos()));
+				}
+				return retVal;
+			}
+			std::vector<std::vector<std::string>> markers_as_table() {
+				std::vector<std::vector<std::string>> retVal;
+				retVal.reserve(markers.size()+1);
+				retVal.push_back({"Line","Pos"});
+				for (auto& mark : markers) {
+					retVal.push_back({std::to_string(mark.getLine()), std::to_string(mark.getPos())});
+				}
+				return retVal;
+			}
 		private:
+			/* Reduce the composite_entry to only contain {line_number, line_content}.
+			 * Make a new vector/list that contains only {line_number, file_pos}. Sort list by either value, they should coincide.
+			 * The new vector line_markers{} will be used for jumping around the file.
+			 * This means if we currently have lines 400-500 in the Buffer, but we want to see 300-400...
+			 * We can visit line_markers.line(300) will return the position marker for 300 and we can read from there.
+			 * */
 			size_t buffer_rows;
 			size_t visible_rows;
-			std::deque<std::string>Buffer; //the buffer containing the lines of the file that we find important
+			size_t row_count = 0;
+			std::deque<composite_entry>Buffer; //the buffer containing the lines of the file that we find important
+			std::list<file_marker>markers;
 			std::ifstream file; //input filestream
+			//adds marker
+			void add_marker(const size_t file_pos, const size_t line_num) {
+				markers.push_back({row_count, file_pos});
+			}
+			//Reads the next line in the file to the buffer
 			bool read_line_to_buffer() {//, std::ifstream::pos_type file_pos) {
+				//precondition
 				if (not file.is_open()) return 0; //failure; cannot read from file.
+				//function body
 				std::string line_to_get;
+				auto pos_before_read = file.tellg();
 				getline(file, line_to_get);
-				Buffer.push_back(line_to_get);
+				//update buffer & marker data
+				if ((row_count % 10) == 0) add_marker(pos_before_read, row_count);
+				Buffer.emplace_back(row_count++, line_to_get);
+				//
 				return 1;
 			}
 	};
@@ -111,10 +179,8 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 			void loadData() {
 				baseComp = Container::Vertical({});
 				//
-				int count = 0;
 				for (auto& str : file_contents.get_next(20)) {
-					count++;
-					Component tmpComp = Renderer([&, str, count]{
+					Component tmpComp = Renderer([&, str]{
 						return hbox({
 							text(str),
 						});
@@ -122,6 +188,12 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 					//
 					baseComp->Add(tmpComp);
 				}
+				auto table = Table(file_contents.markers_as_table()).Render();
+				auto table_renderer = Renderer([&,table] {
+					return hbox(table) | borderRounded | flex_shrink;
+				});
+				baseComp->Add(table_renderer);
+
 			}
 			//
 			Component baseComp;
