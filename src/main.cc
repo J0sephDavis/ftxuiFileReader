@@ -19,43 +19,39 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 				visible_rows(visible_rows)
 			{
 				//Check file validity
-				if (not file.good()) throw std::runtime_error("fileHandler::file.good() == false.");
-				file.open(file_path, std::ios_base::in);
-				//Load data
-				if (file.is_open()) {
-					//contains the number of the buffer entry we are starting from
+				if (file.good() and file.is_open()) {
+					//declare variables
+					bool readFlag = true;
+					int rowCount;
 					std::string line_to_get;
-					while (Buffer.size() < buffer_rows)
-						if (read_line_to_buffer() == false) break; //breaks if something goes wrong
+					//Load data
+					for (rowCount = 0; rowCount < buffer_rows and readFlag; rowCount++)
+						readFlag = read_line_to_buffer();
+					//adjust size variables
+					if (rowCount < buffer_rows) buffer_rows = rowCount;
+					if (visible_rows > buffer_rows) visible_rows = buffer_rows;
 				}
 				return;
 			}
-			std::vector<std::string> get_visible(size_t size = 40) {
-				std::vector<std::string> retVal(size);
-				for (size_t a =0; a < 40; a++) {
-					retVal.emplace_back(Buffer.front());
-					Buffer.pop();
+			std::vector<std::string> get_next(size_t size) {
+				std::vector<std::string> retVal;
+				size_t rows = std::min(size, Buffer.size());
+				for (size_t line =0; line < rows; line++) {
+					retVal.push_back(Buffer.front().data());
+					Buffer.pop_front();
 				}
 				return retVal;
 			}
 		private:
 			size_t buffer_rows;
 			size_t visible_rows;
-			std::queue<std::string>Buffer; //the buffer containing the lines of the file that we find important
+			std::deque<std::string>Buffer; //the buffer containing the lines of the file that we find important
 			std::ifstream file; //input filestream
-			//bool readChunk(size_t chunkSize) {
-			//	//buffer_entry : the entry we begin writing into.
-			//	for (int i = 0; i < chunkSize; i++) {
-			//		Buffer.pop();
-			//		read_line_to_buffer();
-			//	}
-			//	return 1;
-			//}
 			bool read_line_to_buffer() {//, std::ifstream::pos_type file_pos) {
 				if (not file.is_open()) return 0; //failure; cannot read from file.
 				std::string line_to_get;
 				getline(file, line_to_get);
-				Buffer.push(line_to_get);
+				Buffer.push_back(line_to_get);
 				return 1;
 			}
 	};
@@ -116,11 +112,11 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 				baseComp = Container::Vertical({});
 				//
 				int count = 0;
-				for (auto& str : file_contents.get_visible()) {
+				for (auto& str : file_contents.get_next(20)) {
 					count++;
 					Component tmpComp = Renderer([&, str, count]{
 						return hbox({
-							text(std::to_string(count) + ":"), text(str),
+							text(str),
 						});
 					});
 					//
