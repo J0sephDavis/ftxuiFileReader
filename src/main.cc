@@ -65,6 +65,7 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 				}
 				return;
 			}
+			//
 			std::vector<std::string> get_next(size_t size) {
 				std::vector<std::string> retVal;
 				size_t rows = std::min(size, Buffer.size());
@@ -74,6 +75,7 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 				}
 				return retVal;
 			}
+			//
 			std::vector<std::string> show_markers() {
 				std::vector<std::string> retVal;
 				retVal.push_back("Line,Pos [" + std::to_string(markers.size()) + "]");
@@ -82,6 +84,7 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 				}
 				return retVal;
 			}
+			//
 			std::vector<std::vector<std::string>> markers_as_table() {
 				std::vector<std::vector<std::string>> retVal;
 				retVal.reserve(markers.size()+1);
@@ -98,7 +101,7 @@ Component customFileReader(std::string PATH, const int _dim_x_, const int _dim_y
 			 * This means if we currently have lines 400-500 in the Buffer, but we want to see 300-400...
 			 * We can visit line_markers.line(300) will return the position marker for 300 and we can read from there.
 			 * */
-			size_t buffer_rows;
+			size_t buffer_rows; 	//the number of rows in the buffer
 			size_t visible_rows;
 			size_t row_count = 0;
 			std::deque<composite_entry>Buffer; //the buffer containing the lines of the file that we find important
