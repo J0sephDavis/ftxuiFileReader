@@ -1,4 +1,3 @@
-#include <cstdlib>
 #include <fstream>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/component/component.hpp> //for CatchEvent()
