@@ -1,4 +1,3 @@
-#include <cstdlib>
 #include <fstream>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/component/component.hpp> //for CatchEvent()
@@ -105,9 +104,22 @@ class viewingPane : public ui::ComponentBase {
 
 int main(int argc, char** argv) {
 	//process argument & load file content
-	if (argc < 2) exit(EXIT_FAILURE);
 	std::vector<std::string> file_contents;
-	{ //TODO: Determine the proper checks to ensure the file/stream is good & readable.
+	bool pipe_reading_warning = false;
+	if (argc < 2) {
+		//check to see if we are reading from the standard input
+		if (!std::cin.good()) exit(EXIT_FAILURE);
+		pipe_reading_warning = true;
+		std::string inputLine;
+		//read from pipe
+		while(getline(std::cin, inputLine)) {
+			std::cin >> inputLine;
+			file_contents.push_back(inputLine);
+		}
+		//bring stdin back to the user
+		stdin = freopen("/dev/tty", "r", stdin);
+	}
+	else { //TODO: Determine the proper checks to ensure the file/stream is good & readable.
 		fs::path file_path(argv[1]);
 		if (!fs::is_regular_file(file_path)) exit(EXIT_FAILURE);
 		std::ifstream file(file_path);
@@ -121,6 +133,7 @@ int main(int argc, char** argv) {
 	if (file_contents.empty()) exit(EXIT_FAILURE);
 	//creating the UI
 	auto application_screen = ui::ScreenInteractive::FitComponent();
+	auto file_viewing_screen = ui::Make<viewingPane>(std::move(file_contents));
 	auto quit_handler = ui::CatchEvent([&application_screen](ui::Event event){
 		if (event == ui::Event::Character('q')) {
 			application_screen.ExitLoopClosure()();
@@ -128,9 +141,12 @@ int main(int argc, char** argv) {
 		}
 		return false; //no event handled
 	});
-	auto file_viewing_screen = ui::Make<viewingPane>(std::move(file_contents));
+	std::string header;
+	if (pipe_reading_warning)
+		header = "!WARNING! - Readings contents from stdin may be ill-formatted";
+	else
+		header = "Viewing Pane Renderer";
 	auto scroll_renderer = ui::Renderer(file_viewing_screen, [&] {
-			auto header = "Viewing Pane Renderer";
 			return ui::vbox({
 					ui::hbox({
 						ui::text(header),
