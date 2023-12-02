@@ -56,5 +56,5 @@ int main(int argc, char** argv) {
 	});
 	
 	application_screen.Loop(test_comp | ui::border);
-	return(EXIT_SUCCESS);
+	exit(EXIT_SUCCESS);
 }
