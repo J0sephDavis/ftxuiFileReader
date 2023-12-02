@@ -2,7 +2,6 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/component/component.hpp> //for CatchEvent()
 #include <ftxui/dom/elements.hpp>
-#include <sstream>
 #include <vector>
 #include <string>
 #include <filesystem>
@@ -15,7 +14,6 @@
 
 namespace fs = std::filesystem;
 namespace ui = ftxui;
-static const std::string tab_string = "    ";
 //component to display the text & render
 class viewingPane : public ui::ComponentBase {
 	private:
@@ -103,44 +101,49 @@ class viewingPane : public ui::ComponentBase {
 		}
 };
 
+std::string replace_tabs(std::string inputLine) {
+		std::string tab_string = "    ";
+		auto iterator = inputLine.find('\t');
+		while (iterator != std::string::npos) {
+			inputLine.replace(iterator, 1, tab_string);
+			iterator = inputLine.find('\t');
+		}
+		return inputLine;
+}
+std::vector<std::string> getFileContents(fs::path filePath) {
+	//TODO: Determine the proper checks to ensure the file/stream is good & readable.
+	if (!fs::is_regular_file(filePath)) exit(EXIT_FAILURE);
+	std::ifstream file(filePath);
+	if (file.bad()) exit(EXIT_FAILURE); //TODO: see if this is necessary
+	//read from file
+	std::vector<std::string> file_contents;// = balls(file);
+	std::string fileLine;
+	while(std::getline(file, fileLine)) {
+		file_contents.push_back(replace_tabs(fileLine));
+	}
+	file.close();
+	//
+	return std::move(file_contents);
+}
+
+std::vector<std::string> getPipeContents() {
+	std::vector<std::string> pipe_contents;
+	//check to see if we are reading from the standard input
+	if (!std::cin.good()) exit(EXIT_FAILURE);
+	//read from pipe
+	std::string inputLine;
+	while(getline(std::cin, inputLine)) {
+		auto iterator = inputLine.find('\t');
+		pipe_contents.push_back(replace_tabs(inputLine));
+	}
+	//bring stdin back to the user
+	stdin = freopen("/dev/tty", "r", stdin);
+	return std::move(pipe_contents);
+}
+
 int main(int argc, char** argv) {
 	//process argument & load file content
-	std::vector<std::string> file_contents;
-	bool pipe_reading_warning = false;
-	if (argc < 2) {
-		//check to see if we are reading from the standard input
-		if (!std::cin.good()) exit(EXIT_FAILURE);
-		//read from pipe
-		pipe_reading_warning = true;
-		std::string inputLine;
-		while(getline(std::cin, inputLine)) {
-			auto iterator = inputLine.find('\t');
-			while (iterator != std::string::npos) {
-				inputLine.replace(iterator, 1, tab_string);
-				iterator = inputLine.find('\t');
-			}
-			file_contents.push_back(inputLine);
-		}
-		//bring stdin back to the user
-		stdin = freopen("/dev/tty", "r", stdin);
-	}
-	else { //TODO: Determine the proper checks to ensure the file/stream is good & readable.
-		fs::path file_path(argv[1]);
-		if (!fs::is_regular_file(file_path)) exit(EXIT_FAILURE);
-		std::ifstream file(file_path);
-		if (file.bad()) exit(EXIT_FAILURE); //TODO: see if this is necessary
-		//read from file
-		std::string fileLine;
-		while(std::getline(file, fileLine)) {
-			auto iterator = fileLine.find('\t');
-			while (iterator != std::string::npos) {
-				fileLine.replace(iterator, 1, tab_string);
-				iterator = fileLine.find('\t');
-			}
-			file_contents.push_back(fileLine);
-		}
-		file.close();
-	}
+	std::vector<std::string> file_contents = (argc < 2) ? getPipeContents() : getFileContents(argv[1]);
 	if (file_contents.empty()) exit(EXIT_FAILURE);
 	//creating the UI
 	auto application_screen = ui::ScreenInteractive::FitComponent();
