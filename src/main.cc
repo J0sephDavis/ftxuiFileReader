@@ -15,15 +15,10 @@ class viewingPane : public ui::ComponentBase {
 	private:
 		std::vector<ui::Element> rows = {};
 	public:
-		viewingPane() {
-			rows.push_back(ui::text("viewing-pane"));
-			//Add(ui::Renderer([] { return ui::text("viewing-pane"); }));
-		};
 		viewingPane(std::vector<std::string> file_contents) {
 			for (auto &line : file_contents) {
 				rows.push_back(ui::text(line));
 			}
-			//Add(ui::Container::Vertical(std::move(rows)));
 		}
 
 		ui::Element Render() override {
