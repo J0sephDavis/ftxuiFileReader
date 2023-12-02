@@ -7,11 +7,9 @@
 #include <string>
 #include <filesystem>
 
-//TODO: scrollbar
-//TODO: line-numbers
-//TODO: allow command input, vim-style at the bottom
-//TODO: jump to line
+//TODO: allow command input, vim-style at the bottom / jump to line
 //TODO: syntax-highlighting
+//TODO: set float_y to the bottom-most visible row (to avoid pressing downarrow 50 times.........)
 
 namespace fs = std::filesystem;
 namespace ui = ftxui;
@@ -19,15 +17,78 @@ namespace ui = ftxui;
 class viewingPane : public ui::ComponentBase {
 	private:
 		std::vector<ui::Element> rows = {};
+		float focus_x = 0;
+		float focus_y = 0;
+		float increment_amount = 0.05f; //TODO: See onEvent()->keep_in_bounds()
 	public:
 		viewingPane(std::vector<std::string> file_contents) {
-			for (auto &line : file_contents) {
-				rows.push_back(ui::text(line));
+			increment_amount = 1.0f/file_contents.size();
+			int number_of_digits = 0;
+			{
+				auto total = file_contents.size();
+				while (total != 0) {
+					number_of_digits++;
+					total /= 10;
+				}
 			}
-		}
+			size_t count = 1;
+			for (auto &line : file_contents) {
+				std::string padding = "";
+				{
+					size_t tmp_count = count;
+					int line_numberOfDigits = 0;
+					//only in effect when we count from 0. left as a precaution
+					if (tmp_count == 0)
+						line_numberOfDigits = 1;
+					else while (tmp_count != 0) {
+						line_numberOfDigits++;
+						tmp_count /= 10;
+					}
+					tmp_count = number_of_digits - line_numberOfDigits;
+					while(tmp_count != 0) {
+						padding.append(" ");
+						tmp_count--;
+					}
+				}
+				ui::Element line_item = ui::hbox({
+						ui::text(padding + std::to_string(count++))| ui::bold | ui::color(ui::Color::Blue),
+						ui::separator(),
+						ui::text(line)
+				});
+				rows.push_back(line_item);
+			}
 
+		}
+		bool OnEvent(ui::Event event) override {
+			//TODO:Either pass the value of increment_amount, or dynamically set the increment amount as a class variable.
+			//prevents the float value from exceeding 1.0f or being reduced below 0.0f
+			auto keep_in_bounds = [&](bool increase) -> float {
+				if (increase)
+					return (focus_y + increment_amount > 1.0f ? 1.f : focus_y + increment_amount);
+				else
+					return (focus_y - increment_amount < 0.0f ? 0.0f : focus_y - increment_amount);
+			};
+			//
+			if (event == ui::Event::ArrowDown) {
+				focus_y = keep_in_bounds(1);
+				return true;
+			}
+			if (event == ui::Event::ArrowUp) {
+				focus_y = keep_in_bounds(0);
+				return true;
+			}
+			if (event == ui::Event::Escape) {
+				focus_y = 0.f;
+				return true;
+			}
+			return false;
+		}
 		ui::Element Render() override {
-			return ui::vbox(rows);
+			return ui::vbox(rows)
+				| ui::vscroll_indicator
+				| ui::focusPositionRelative(focus_x, focus_y)
+				| ui::frame
+			;
 		}
 };
 
@@ -56,33 +117,13 @@ int main(int argc, char** argv) {
 		return false; //no event handled
 	});
 	//
-	float focus_x=0, focus_y=0;
-	ui::Component test_comp = ui::Make<viewingPane>(std::move(file_contents));
-#define increment 0.05f
-	test_comp |= ui::CatchEvent([&focus_x,&focus_y](ui::Event event){
-			if (event == ui::Event::ArrowDown) {
-				focus_y = (focus_y + increment > 1.0f ? 1.f : focus_y + increment);
-				return true;
-			}
-			if (event == ui::Event::ArrowUp) {
-				focus_y -= (focus_y - increment < 0.f ? 0.f : focus_y - increment);
-				return true;
-			}
-			if (event == ui::Event::Escape) {
-				focus_y = 0.f;
-				return true;
-			}
-			return false;
-	});
-	auto scroll_renderer = ui::Renderer(test_comp, [&] {
-			auto header = "Viewing Pane Renderer x:(" + std::to_string(focus_x) + ") y:(" + std::to_string(focus_y) + ")";
+	ui::Component file_viewing_screen = ui::Make<viewingPane>(std::move(file_contents));
+	auto scroll_renderer = ui::Renderer(file_viewing_screen, [&] {
+			auto header = "Viewing Pane Renderer";
 			return ui::vbox({
 					ui::text(header),
 					ui::separator(),
-					test_comp->Render()
-						| ui::focusPositionRelative(focus_x, focus_y)
-						| ui::frame
-						| ui::vscroll_indicator,
+					file_viewing_screen->Render(),
 			}) | ui::border;
 	});
 	application_screen.Loop(scroll_renderer | quit_handler);
