@@ -9,7 +9,8 @@
 
 //TODO: allow command input, vim-style at the bottom / jump to line
 //TODO: syntax-highlighting
-//TODO: set float_y to the bottom-most visible row (to avoid pressing downarrow 50 times.........)
+//TODO: set float_y to the bottom-most visible row (to avoid pressing downarrow 50 times)
+//TODO: set float_x to the right-most visible portion (to avoid pressing arrowRight a bunch)
 
 namespace fs = std::filesystem;
 namespace ui = ftxui;
@@ -17,9 +18,9 @@ namespace ui = ftxui;
 class viewingPane : public ui::ComponentBase {
 	private:
 		std::vector<ui::Element> rows = {};
-		float focus_x = 0;
-		float focus_y = 0;
-		float increment_amount = 0.05f; //TODO: See onEvent()->keep_in_bounds()
+		float focus_x = 0.f;
+		float focus_y = 0.f;
+		float increment_amount;
 	public:
 		viewingPane(std::vector<std::string> file_contents) {
 			increment_amount = 1.0f/file_contents.size();
@@ -62,23 +63,27 @@ class viewingPane : public ui::ComponentBase {
 		bool OnEvent(ui::Event event) override {
 			//TODO:Either pass the value of increment_amount, or dynamically set the increment amount as a class variable.
 			//prevents the float value from exceeding 1.0f or being reduced below 0.0f
-			auto keep_in_bounds = [&](bool increase) -> float {
+			auto keep_in_bounds = [&](float value, float increment_amount, bool increase) -> float {
 				if (increase)
-					return (focus_y + increment_amount > 1.0f ? 1.f : focus_y + increment_amount);
+					return (value + increment_amount > 1.0f ? 1.f : value + increment_amount);
 				else
-					return (focus_y - increment_amount < 0.0f ? 0.0f : focus_y - increment_amount);
+					return (value - increment_amount < 0.0f ? 0.0f : value - increment_amount);
 			};
 			//
 			if (event == ui::Event::ArrowDown) {
-				focus_y = keep_in_bounds(1);
+				focus_y = keep_in_bounds(focus_y, increment_amount, 1);
 				return true;
 			}
 			if (event == ui::Event::ArrowUp) {
-				focus_y = keep_in_bounds(0);
+				focus_y = keep_in_bounds(focus_y, increment_amount, 0);
 				return true;
 			}
-			if (event == ui::Event::Escape) {
-				focus_y = 0.f;
+			if (event == ui::Event::ArrowRight) {
+				focus_x = keep_in_bounds(focus_x, 0.1f, 1);
+				return true;
+			}
+			if (event == ui::Event::ArrowLeft) {
+				focus_x = keep_in_bounds(focus_x, 0.1f, 0);
 				return true;
 			}
 			return false;
