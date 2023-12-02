@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <fstream>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/component/component.hpp> //for CatchEvent()
@@ -103,21 +104,22 @@ class viewingPane : public ui::ComponentBase {
 };
 
 int main(int argc, char** argv) {
+	//process argument & load file content
 	if (argc < 2) exit(EXIT_FAILURE);
-	fs::path file_path(argv[1]);
-	if (!fs::is_regular_file(file_path)) exit(EXIT_FAILURE);
-	//the file the user passed
 	std::vector<std::string> file_contents;
-	{
+	{ //TODO: Determine the proper checks to ensure the file/stream is good & readable.
+		fs::path file_path(argv[1]);
+		if (!fs::is_regular_file(file_path)) exit(EXIT_FAILURE);
 		std::ifstream file(file_path);
+		if (file.bad()) exit(EXIT_FAILURE); //TODO: see if this is necessary
+		//
 		std::string fileLine;
-		while(std::getline(file, fileLine)) {
+		while(std::getline(file, fileLine))
 			file_contents.push_back(fileLine);
-		}
-		file.close(); //likely unnecessary as it is deconstructed after this.
+		file.close();
 	}
 	if (file_contents.empty()) exit(EXIT_FAILURE);
-	//the screen that contains(is) the top-level component
+	//creating the UI
 	auto application_screen = ui::ScreenInteractive::FitComponent();
 	auto quit_handler = ui::CatchEvent([&application_screen](ui::Event event){
 		if (event == ui::Event::Character('q')) {
@@ -126,7 +128,6 @@ int main(int argc, char** argv) {
 		}
 		return false; //no event handled
 	});
-	//
 	auto file_viewing_screen = ui::Make<viewingPane>(std::move(file_contents));
 	auto scroll_renderer = ui::Renderer(file_viewing_screen, [&] {
 			auto header = "Viewing Pane Renderer";
@@ -134,11 +135,12 @@ int main(int argc, char** argv) {
 					ui::hbox({
 						ui::text(header),
 						ui::gauge(file_viewing_screen->getVerticalFocus())
-							}),
+					}),
 					ui::separator(),
 					file_viewing_screen->Render(),
 			}) | ui::border;
 	});
+	//the main loop
 	application_screen.Loop(scroll_renderer | quit_handler);
 	exit(EXIT_SUCCESS);
 }
