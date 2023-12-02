@@ -15,6 +15,7 @@
 
 namespace fs = std::filesystem;
 namespace ui = ftxui;
+static const std::string tab_string = "    ";
 //component to display the text & render
 class viewingPane : public ui::ComponentBase {
 	private:
@@ -109,11 +110,15 @@ int main(int argc, char** argv) {
 	if (argc < 2) {
 		//check to see if we are reading from the standard input
 		if (!std::cin.good()) exit(EXIT_FAILURE);
+		//read from pipe
 		pipe_reading_warning = true;
 		std::string inputLine;
-		//read from pipe
 		while(getline(std::cin, inputLine)) {
-			std::cin >> inputLine;
+			auto iterator = inputLine.find('\t');
+			while (iterator != std::string::npos) {
+				inputLine.replace(iterator, 1, tab_string);
+				iterator = inputLine.find('\t');
+			}
 			file_contents.push_back(inputLine);
 		}
 		//bring stdin back to the user
@@ -124,10 +129,16 @@ int main(int argc, char** argv) {
 		if (!fs::is_regular_file(file_path)) exit(EXIT_FAILURE);
 		std::ifstream file(file_path);
 		if (file.bad()) exit(EXIT_FAILURE); //TODO: see if this is necessary
-		//
+		//read from file
 		std::string fileLine;
-		while(std::getline(file, fileLine))
+		while(std::getline(file, fileLine)) {
+			auto iterator = fileLine.find('\t');
+			while (iterator != std::string::npos) {
+				fileLine.replace(iterator, 1, tab_string);
+				iterator = fileLine.find('\t');
+			}
 			file_contents.push_back(fileLine);
+		}
 		file.close();
 	}
 	if (file_contents.empty()) exit(EXIT_FAILURE);
@@ -141,12 +152,8 @@ int main(int argc, char** argv) {
 		}
 		return false; //no event handled
 	});
-	std::string header;
-	if (pipe_reading_warning)
-		header = "!WARNING! - Readings contents from stdin may be ill-formatted";
-	else
-		header = "Viewing Pane Renderer";
 	auto scroll_renderer = ui::Renderer(file_viewing_screen, [&] {
+			auto header = "Viewing Pane Renderer";
 			return ui::vbox({
 					ui::hbox({
 						ui::text(header),
