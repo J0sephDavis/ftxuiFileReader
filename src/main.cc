@@ -11,6 +11,7 @@
 //TODO: syntax-highlighting
 //TODO: set float_y to the bottom-most visible row (to avoid pressing downarrow 50 times)
 //TODO: set float_x to the right-most visible portion (to avoid pressing arrowRight a bunch)
+//TODO: Look into reading from piped files. e.g., COMMAND | less --> COMMAND | reader should be roughly equivalent. Likely need an empty constructor + function to add element rows
 
 namespace fs = std::filesystem;
 namespace ui = ftxui;
@@ -38,7 +39,7 @@ class viewingPane : public ui::ComponentBase {
 				{
 					size_t tmp_count = count;
 					int line_numberOfDigits = 0;
-					//only in effect when we count from 0. left as a precaution
+					//only in effect when we start count at 0; left as a precaution
 					if (tmp_count == 0)
 						line_numberOfDigits = 1;
 					else while (tmp_count != 0) {
@@ -61,11 +62,10 @@ class viewingPane : public ui::ComponentBase {
 
 		}
 		bool OnEvent(ui::Event event) override {
-			//TODO:Either pass the value of increment_amount, or dynamically set the increment amount as a class variable.
 			//prevents the float value from exceeding 1.0f or being reduced below 0.0f
 			auto keep_in_bounds = [&](float value, float increment_amount, bool increase) -> float {
 				if (increase)
-					return (value + increment_amount > 1.0f ? 1.f : value + increment_amount);
+					return (value + increment_amount > 1.0f ? 1.0f : value + increment_amount);
 				else
 					return (value - increment_amount < 0.0f ? 0.0f : value - increment_amount);
 			};
@@ -91,9 +91,14 @@ class viewingPane : public ui::ComponentBase {
 		ui::Element Render() override {
 			return ui::vbox(rows)
 				| ui::vscroll_indicator
+//				| ui::hscroll_indicator //not in FTXUI V5.0.0, yet.
 				| ui::focusPositionRelative(focus_x, focus_y)
 				| ui::frame
 			;
+		}
+		//returns the focus_y variable
+		const float getVerticalFocus() {
+			return this->focus_y;
 		}
 };
 
@@ -122,11 +127,14 @@ int main(int argc, char** argv) {
 		return false; //no event handled
 	});
 	//
-	ui::Component file_viewing_screen = ui::Make<viewingPane>(std::move(file_contents));
+	auto file_viewing_screen = ui::Make<viewingPane>(std::move(file_contents));
 	auto scroll_renderer = ui::Renderer(file_viewing_screen, [&] {
 			auto header = "Viewing Pane Renderer";
 			return ui::vbox({
-					ui::text(header),
+					ui::hbox({
+						ui::text(header),
+						ui::gauge(file_viewing_screen->getVerticalFocus())
+							}),
 					ui::separator(),
 					file_viewing_screen->Render(),
 			}) | ui::border;
